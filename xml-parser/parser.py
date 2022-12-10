@@ -17,6 +17,23 @@ from pycfdi_transform import CFDI40SAXHandler
 from pycfdi_transform.formatters.cfdi40.efisco_corp_cfdi40_formatter import EfiscoCorpCFDI40Formatter
 from pycfdi_transform.formatters.cfdi40.cda_cfdi40_formatter import CDACFDI40Formatter
 
+from re import split,sub
+
+def camelize(string):
+    return ''.join(a.capitalize() for a in split('([^a-zA-Z0-9])', string)
+       if a.isalnum())
+
+def camel_case(s):
+  s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
+  return ''.join([s[0].lower(), s[1:]])
+#print(camel_case('JavaScript'))
+#print(camel_case('Foo-Bar'))
+#print(camel_case('foo_bar'))
+#print(camel_case('--foo.bar'))
+#print(camel_case('Foo-BAR'))
+#print(camel_case('fooBAR'))
+#print(camel_case('foo bar'))
+
 
 files_basename = '/home/ambagasdowa/github/Cmex/api-cmex/files/'
 files = [
@@ -35,7 +52,7 @@ try:
 except pyodbc.Error as e:
     # print("Error %d: %s" % (e.args[0], e.args[1]))
     print("Error {}: {}".format(e.args[0], e.args[1]))
-    sys.exit(1)
+#    sys.exit(1)
 
 # import pyodbc as db # forgot the imports
 #conn.setdecoding(db.SQL_CHAR, encoding='latin1')
@@ -48,7 +65,7 @@ cursor = cnxn.cursor()
 #cursor.execute('SELECT id, xml FROM prueba WHERE id=?', (idPerson,))
 
 # I'm the important line
-#cursor.fast_executemany = True
+cursor.fast_executemany = True
 
 
 # NOTE Insert Example
@@ -80,6 +97,28 @@ print("[blue]source file : " + source + "[blue]")
 
 # path xml que queremos transformar
 path_xml = source
+
+
+
+print("[blue] Start CartaPorte20 DATA  XTRACTION [blue]")
+tree = ET.parse(source)
+# getting the parent tag of
+# the xml document
+root = tree.getroot()
+
+# https://docs.python.org/es/3.9/library/xml.etree.elementtree.html
+ns = {'cfdi': 'http://www.sat.gob.mx/cfd/4',
+      'cartapore20': 'http://www.sat.gob.mx/CartaPorte20'}
+
+
+
+
+
+
+
+
+
+
 transformer = CFDI40SAXHandler()  # Cfdi 4.0
 # transformer = CFDI40SAXHandler().use_concepts_cfdi40()  # Cfdi 4.0
 cfdi_data = transformer.transform_from_file(path_xml)
@@ -116,6 +155,8 @@ fields = ('cmex_api_controls_files_id',)
 
 cmex_api_controls_files_id = 1
 save_complement = (cmex_api_controls_files_id, )
+
+#General info
 
 for ind, data in cfdi_data['cfdi40'].items():
     if ind in complements_items:
@@ -161,36 +202,230 @@ print("Count of the element : " + str(len(save_complement)))
 # insert into db
 
 insert = "insert into sistemas.dbo.cmex_api_cfdi_comprobante(cmex_api_controls_files_id, version, serie, folio, fecha,no_certificado, subtotal, descuento, total, moneda,tipo_cambio, tipo_comprobante, metodo_pago, forma_pago ,condiciones_pago,exportacion, lugar_expedicion, sello, certificado ,cmex_api_standings_id,cmex_api_parents_id, created, modified, _status) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-#print(insert)
-
-#insert = "insert into sistemas.dbo.cmex_api_cfdi_comprobante(cmex_api_controls_files_id,sello,certificado) values(?,?,?)"
-#bulk = (cmex_api_controls_files_id, save_complement[17], save_complement[18],)
 # NOTE Working from hir
-for i in track(range(2), description="Saving to database..."):
+for i in track(range(2), description="Saving to Complement data to database..."):
     time.sleep(1)  # Simulate work being done
 
 count = cursor.execute(insert, save_complement)
-#count = cursor.execute(insert, bulk)
 cursor.commit()
-print('Rows inserted: ' + str(count))
-# print(str(count))
-cursor.close()
-#connection.close()
+
+
+# get last id from comprobante 
+cursor.execute ( "select IDENT_CURRENT('sistemas.dbo.cmex_api_cfdi_comprobante') as id")
+comprobante_last_id = cursor.fetchone()[0]
+cursor.commit()
+print("[red]"+str(comprobante_last_id)+"[red]")
+
+element_qry = "insert into sistemas.dbo.cmex_api_cfdi_data( \
+                cmex_api_controls_files_id \
+                ,cmex_api_section_id \
+                ,cmex_api_tags_id \
+                ,value \
+                ,created \
+                ,modified \
+                ,_status \
+            ) values(?,?,?,?,?,?,?)"
+
+
+#=== === === === === === === ===  Emisor === === === === === === === === 
+for i in track(range(2), description="Saving to Emisor data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for emisor element
+element_id = 1 #Emisor
+emisor_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ?"
+cursor.execute( emisor_element, (element_id,) )
+
+elements = cursor.fetchall()
+for ids,ele in elements:
+    print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+
+save_emisor = ()
+for emisor_id,name in elements:
+#    save_emisor = save_emisor + ((cmex_api_controls_files_id, element_id,emisor_id,cfdi_data['cfdi40']['emisor'][name],created,modified,status),)
+    saved_emisor = (cmex_api_controls_files_id, element_id,emisor_id,cfdi_data['cfdi40']['emisor'][name],created,modified,status,)
+    cursor.execute(element_qry,saved_emisor)
+    cursor.commit()
+
+
+
+#=== === === === === === === ===  Receptor === === === === === === === === 
+
+for i in track(range(2), description="Saving to Receptor data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for receptor element
+element_id = 2 #receptor
+
+receptor_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ?"
+cursor.execute( receptor_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+    print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+save_receptor = ()
+for receptor_id,name in elements:
+#    save_receptor = save_receptor + ((cmex_api_controls_files_id, element_id,receptor_id,cfdi_data['cfdi40']['receptor'][name],created,modified,status),)
+    saved_receptor = (cmex_api_controls_files_id, element_id,receptor_id,cfdi_data['cfdi40']['receptor'][name],created,modified,status,)
+    cursor.execute(element_qry,saved_receptor)
+    cursor.commit()
+
+
+
+
+#=== === === === === === === ===  Receptor === === === === === === === === 
+
+for i in track(range(2), description="Saving to impuestos data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for impuestos element
+element_id = 4 #impuestos
+
+impuestos_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ? and id in (11,12)"
+cursor.execute( impuestos_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+        print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+save_impuestos = ()
+for impuestos_id,name in elements:
+#    save_impuestos = save_impuestos + ((cmex_api_controls_files_id, element_id,impuestos_id,cfdi_data['cfdi40']['impuestos'][name],created,modified,status),)
+    saved_impuestos = (cmex_api_controls_files_id, element_id,impuestos_id,cfdi_data['cfdi40']['impuestos'][name],created,modified,status,)
+    cursor.execute(element_qry,saved_impuestos)
+    cursor.commit()
+
+
+#=== === === === === === === ===  cartaporte === === === === === === === === 
+#Retentions && tralations
+for i in track(range(2), description="Saving to retenciones data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for retenciones element
+element_id = 5 #retenciones
+
+retenciones_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ? "
+cursor.execute( retenciones_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+        print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+print(type(cfdi_data['cfdi40']['emisor']))
+print(type(cfdi_data['cfdi40']['impuestos']['retenciones'][0]))
+save_retenciones = ()
+for retenciones_id,name in elements:
+#    save_retenciones = save_retenciones + ((cmex_api_controls_files_id, element_id,retenciones_id,cfdi_data['cfdi40']['retenciones'][name],created,modified,status),)
+    saved_retenciones = (cmex_api_controls_files_id, element_id,retenciones_id,cfdi_data['cfdi40']['impuestos']['retenciones'][0][name],created,modified,status,)
+    cursor.execute(element_qry,saved_retenciones)
+    cursor.commit()
+
+
+
+#=== === === === === === === ===  Traslados === === === === === === === === 
+#Retentions && tralations
+for i in track(range(2), description="Saving to traslados data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for traslados element
+element_id = 6 #traslados
+
+traslados_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ? "
+cursor.execute( traslados_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+        print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+save_traslados = ()
+for traslados_id,name in elements:
+#    save_traslados = save_traslados + ((cmex_api_controls_files_id, element_id,traslados_id,cfdi_data['cfdi40']['traslados'][name],created,modified,status),)
+    saved_traslados = (cmex_api_controls_files_id, element_id,traslados_id,cfdi_data['cfdi40']['impuestos']['traslados'][0][name],created,modified,status,)
+    cursor.execute(element_qry,saved_traslados)
+    cursor.commit()
+
+
+#=== === === === === === === ===  cartaporte === === === === === === === === 
+
+for i in track(range(2), description="Saving to cartaporte data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for cartaporte element
+element_id = 7 #cartaporte
+
+cartaporte_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ?"
+cursor.execute( cartaporte_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+    print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+print('[cyan]Go inside CartaPorte :[cyan]')
+for concept in tree.findall('.//cartapore20:CartaPorte', ns):
+    print( concept.attrib )
+
+save_cartaporte = ()
+for cartaporte_id,name in elements:
+#    save_cartaporte = save_cartaporte + ((cmex_api_controls_files_id, element_id,cartaporte_id,cfdi_data['cfdi40']['cartaporte'][name],created,modified,status),)
+    print("[cyan]"+name+"[cyan]")
+    print("[brown]"+camelize(name)+"[brown]")
+    saved_cartaporte = (cmex_api_controls_files_id, element_id,cartaporte_id,concept.attrib[camelize(name)],created,modified,status,)
+    cursor.execute(element_qry,saved_cartaporte)
+    cursor.commit()
+
+
+#=== === === === === === === ===  ubicacion_origen === === === === === === === === 
+
+for i in track(range(2), description="Saving to ubicacion_origen data to database..."):
+    time.sleep(1)  # Simulate work being done
+
+# Get the fields for ubicacion_origen element
+element_id = 8 #ubicacion_origen
+
+ubicacion_origen_element = "select id,cmex_api_tagname from sistemas.dbo.cmex_api_tags where cmex_api_section_id = ?"
+cursor.execute( ubicacion_origen_element, (element_id,) )
+
+elements = cursor.fetchall()
+
+for ids,ele in elements:
+    print ("[red]"+str(ids)+"[red] : [blue]"+str(ele)+"[blue]")
+
+print('[cyan]Go inside ubicacion_origen :[cyan]')
+for concept in tree.findall('.//cartapore20:Ubicacion', ns):
+    print( concept.attrib )
+
+    save_ubicacion_origen = ()
+    for ubicacion_origen_id,name in elements:
+    #    save_ubicacion_origen = save_ubicacion_origen + ((cmex_api_controls_files_id, element_id,ubicacion_origen_id,cfdi_data['cfdi40']['ubicacion_origen'][name],created,modified,status),)
+        saved_ubicacion_origen = (cmex_api_controls_files_id, element_id,ubicacion_origen_id,concept.attrib[camelize(name)],created,modified,status,)
+        cursor.execute(element_qry,saved_ubicacion_origen)
+        cursor.commit()
+
+
+
 
 
 print("[blue] Start TFD11 DATA  XTRACTION [blue]")
 print(cfdi_data['tfd11'])
 
 
-print("[blue] Start CartaPorte20 DATA  XTRACTION [blue]")
-tree = ET.parse(source)
-# getting the parent tag of
-# the xml document
-root = tree.getroot()
 
-# https://docs.python.org/es/3.9/library/xml.etree.elementtree.html
-ns = {'cfdi': 'http://www.sat.gob.mx/cfd/4',
-      'cartapore20': 'http://www.sat.gob.mx/CartaPorte20'}
+
+
+
+
+
+
+
+
+
 
 
 # for child in root:
@@ -212,14 +447,6 @@ ns = {'cfdi': 'http://www.sat.gob.mx/cfd/4',
 #            print(concept.tag, concept.attrib)
 #        for concept in tree.findall('.//cfdi:Retencion', ns):
 #            print(concept.tag, concept.attrib)
-
-print('[cyan]Go inside CartaPorte20 :[cyan]')
-for concept in tree.findall('.//cartapore20:CartaPorte20', ns):
-    print(concept.tag, concept.attrib)
-for concept in tree.findall('.//cartapore20:Ubicacion', ns):
-    print(concept.tag, concept.attrib)
-for concept in tree.findall('.//cartapore20:Domicilio', ns):
-    print(concept.tag, concept.attrib)
 
 
 # print("[cyan]Iterate over concept :[cyan]")
@@ -256,3 +483,5 @@ for concept in tree.findall('.//cartapore20:Domicilio', ns):
 #print("[blue] Start CFDI XTRACTION [blue]")
 # print(cfdi_data)
 #
+
+cursor.close()
