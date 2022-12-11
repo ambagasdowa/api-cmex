@@ -1,4 +1,10 @@
 #!/bin/python3
+
+#=== === === === === === === ===  NOTES Section  === === === === === === === === #
+
+# TODO buiild as a package 
+
+#=== === === === === === === ===  Import Section  === === === === === === === === #
 import pyodbc
 import urllib
 import os
@@ -8,13 +14,14 @@ import subprocess
 # importing element tree
 # under the alias of ET
 import xml.etree.ElementTree as ET
-from rich import print
 
-from datetime import datetime,date,tzinfo, timedelta
-import time
+#UIX
+from rich import print
 from rich.progress import track
 from rich.progress import Progress
 
+from datetime import datetime,date,tzinfo, timedelta
+import time
 
 from pycfdi_transform import CFDI40SAXHandler
 from pycfdi_transform.formatters.cfdi40.efisco_corp_cfdi40_formatter import EfiscoCorpCFDI40Formatter
@@ -26,23 +33,9 @@ import zipfile
 #md5
 import hashlib
 
-def camelize(string):
-    return ''.join(a.capitalize() for a in split('([^a-zA-Z0-9])', string)
-                   if a.isalnum())
 
+# === === === === === === === ===  Config Section  === === === === === === === ===
 
-def camel_case(s):
-    s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
-    return ''.join([s[0].lower(), s[1:]])
-# print(camel_case('JavaScript'))
-# print(camel_case('Foo-Bar'))
-# print(camel_case('foo_bar'))
-# print(camel_case('--foo.bar'))
-# print(camel_case('Foo-BAR'))
-# print(camel_case('fooBAR'))
-#print(camel_case('foo bar'))
-
-## NOTE Config
 
 config = {
     "db_connection":{
@@ -62,7 +55,7 @@ config = {
     "service_params":{ #Partialy implemented ** Obligatorios e implementados
         "representacion":"XML", #** XML,PDF,ACUSE
         "pageSize":"100", #** [0-100] default 50
-        "fecha":'2022-12-10', #** yyyy-mm-dd
+        "fecha":'2022-12-10', #** yyyy-mm-dd the default is ? that means:yesterday
         "fechaInicial":'?', # yyyy-mm-dd
         "fechaFinal":'?', # yyyy-mm-dd
         "serie":'', # yyyy-mm-dd
@@ -73,6 +66,29 @@ config = {
     }
 }
 
+
+# === === === === === === === ===  Config Section  === === === === === === === ===
+
+
+# === === === === === === === ===  Library Section  === === === === === === === === #
+
+## TODO build this as package
+
+
+def camelize(string):
+    return ''.join(a.capitalize() for a in split('([^a-zA-Z0-9])', string)
+                   if a.isalnum())
+
+
+def camel_case(s):
+    s = sub(r"(_|-)+", " ", s).title().replace(" ", "")
+    return ''.join([s[0].lower(), s[1:]])
+
+
+# === === === === === === === ===  Library Section  === === === === === === === === #
+
+
+# === === === === === === === ===  Main Section  === === === === === === === === #
 
 
 print("[green]Connecting...[green]")
@@ -89,43 +105,14 @@ except pyodbc.Error as e:
     print("Error {}: {}".format(e.args[0], e.args[1]))
     sys.exit(1)
 
-# import pyodbc as db # forgot the imports
-#conn.setdecoding(db.SQL_CHAR, encoding='latin1')
-# conn.setencoding('latin1')
-
 print("[blue]DB Connected...[blue]")
 
-#idPerson = 2
 cursor = cnxn.cursor()
-#cursor.execute('SELECT id, xml FROM prueba WHERE id=?', (idPerson,))
 
 # I'm the important line
 cursor.fast_executemany = True
 
-
-# NOTE Insert Example
-# sql = "insert into TableName (Col1, Col2, Col3) values (?, ?, ?)"
-# tuples=[('foo','bar', 'ham'), ('hoo','far', 'bam')]
-# cursor.executemany(sql, tuples)
-# cursor.commit()
-# cursor.close()
-# connection.close()
-
-
-# working example
-#cursor.execute("SELECT * FROM INFORMATION_SCHEMA.COLUMNS")
-# for row in cursor.fetchall():
-#    print(row)
-
-# Passing the path of the
-# xml document to enable the
-# parsing process
-# parsing as xargs
-
-print ("[violet]"+"Downloading files "+"[violet]")
-# NOTE command for download
-# https -vvv -d transportescp.xsa.com.mx:9050/5365d430-32dc-4f0a-8725-905aeb373c1b/descargasCfdi representacion==XML pageSize==50
-
+print ("[violet]"+"Downloading files ..."+"[violet]")
 
 for i in track(range(1), description="Cleaning storing dir ..."):    time.sleep(1)  # Simulate work being done
 tmp_path = config['download_config']['download_path'] + config['download_config']['dir_path']
@@ -154,19 +141,23 @@ for i in track(range(1), description="Downloading xml files ..."):
 # fechas , folios
 #if fecha is None:
 #fecha = config['service_params']['fecha'].replace('?',str(date.today()))
-fecha = config['service_params']['fecha']
-#if pageSize is None:
+if (config['service_params']['fecha'] == '?'):
+    fecha = str(date.today() - timedelta(days=1))
+else:
+    fecha = config['service_params']['fecha']
+print ("[blue] Downloading files for date [blue]: [red]"+fecha+"[red]")
+
 pageSize = config['service_params']['pageSize']
-#if representacion is None:
 representacion = config['service_params']['representacion']
 
-download_files = subprocess.run([ "https" , "-vvv","--download" , http_path ,'representacion=='+representacion,'pageSize=='+pageSize,"fecha=="+fecha, "--output" , pack+filename ]) 
+download_files = subprocess.run([ "https" , "--print=hb","--download" , http_path ,'representacion=='+representacion,'pageSize=='+pageSize,"fecha=="+fecha, "--output" , pack+filename ]) 
 
-
-with zipfile.ZipFile(pack+filename, 'r') as zip_ref:
-    zip_ref.extractall(unpack)
-
-#list_files = subprocess.run(["ls","-1v","/tmp/gst_xml/unpack"], stdout=subprocess.DEVNULL)
+try:
+    with zipfile.ZipFile(pack+filename, 'r') as zip_ref:
+        zip_ref.extractall(unpack)
+except zipfile.BadZipfile:
+    print("[red] zip file : "+pack+filename+" from provider with errors , try again ...[red]")
+    exit()
 
 # One with have the files 
 def get_files(path):
@@ -178,27 +169,19 @@ files = []
 for file in get_files(unpack):
     files.append(file)
 
+
+
 for i in track(range(1), description="unzipping and process files ..."):
     time.sleep(1)  # Simulate work being done
 print (files)
 
 
 
-# FILES
-# this can be /tmp/dir 
-#files_basename = '/home/ambagasdowa/github/Cmex/api-cmex/files/'
-
-#files = [
-#    'F7549E3A-4EAF-48C1-9F40-C701A4D0CCB0_FAC_46_11052022_014243.xml', 'D9F5AE04-485B-4110-8D0C-58E53D335167_FAC_49_11052022_070606.xml'
-#]
-
 #build the function from hir
 
 for filename in files:
     source = unpack + filename
-    print("[blue]source file : " + source + "[blue]")
 
-    #hashlib.md5("example string").hexdigest()
 # Open,close, read file and calculate MD5 on its contents 
     with open(source, 'rb') as file_to_check:
         # read contents of the file
@@ -209,21 +192,16 @@ for filename in files:
     name, ext = os.path.splitext(filename)
     #uuid,doctype:FAC,idfac,Date,SomeCtrlnum
     split_data = str(name).split('_')
-    print(split_data[0])
-    print ("[red] MD5 sum : "+md5_returned+"[red]")
 
     save_file = (split_data[1]+'_'+split_data[2],split_data[0],md5_returned,datetime.now().isoformat(timespec='seconds'),'',1,
 )
 
     qry_md5 = "select [_md5sum] from sistemas.dbo.cmex_api_controls_files where [_md5sum] = ?"
     md5 = False
-    print("[yellow] before md5 found : "+str(md5)+"[yellow]")
     cursor.execute(qry_md5,(md5_returned,))
     for row in cursor.fetchall():
-        print(row[0])
         if(row[0] == md5_returned):
             md5 = True
-    print("[blue] md5 found : "+str(md5)+"[blue]")
 
     if(md5 != True):
         print("[blue] save file : "+str(source)+"[blue]")
@@ -266,33 +244,13 @@ for filename in files:
         # transformer = CFDI40SAXHandler().use_concepts_cfdi40()  # Cfdi 4.0
         cfdi_data = transformer.transform_from_file(path_xml)
 
-        # print("[blue] Overview of the CFDI [blue]")
-        # print(cfdi_data)
-
         print("[blue] Start CFDI DATA XTRACTION [blue]")
-        #print(cfdi_data['cfdi40'])
-        #print(cfdi_data['cfdi40'].keys())
-        #print(cfdi_data['cfdi40'].values())
-
 
         complements_items = ['version', 'serie', 'folio', 'fecha', 'no_certificado', 'subtotal', 'descuento', 'total', 'moneda', 'tipo_cambio', 'tipo_comprobante', 'metodo_pago', 'forma_pago',
                              'condiciones_pago', 'exportacion', 'lugar_expedicion', 'sello', 'certificado']
 
         concepts = ['confirmacion', 'emisor', 'receptor',
                     'conceptos', 'impuestos', 'complementos', 'addendas']
-
-
-        # Use an extra comma in your tuples, and just join:
-
-        # a = ((1,1,1),)
-        # for i in range(2,10):
-        #     a = a + ((i,i,i),)
-
-        # Edit: Adapting juanpa.arrivillaga's comment, if you want to stick with a loop, this is the right solution:
-        # a = [(1,1,1)]  # build a list
-        # for i in range (2,10):
-        #     a.append((i,i,i))  # append data to that list
-        # a = tuple(a)   # convert the list into a tuple
 
         fields = ('cmex_api_controls_files_id',)
         save_complement = (cmex_api_controls_files_id, )
@@ -301,17 +259,8 @@ for filename in files:
 
         for ind, data in cfdi_data['cfdi40'].items():
             if ind in complements_items:
-                #        print(ind)
-                #        print(data)
                 fields = fields + (ind,)
                 save_complement = save_complement + (data,)
-
-        # add finals rows
-        #       cmex_api_standings_id       int null,
-        #        cmex_api_parents_id         int null,
-        #        created                     datetime null,
-        #        modified                    datetime null,
-        #        _status                     tinyint default 1 null
 
         cmex_api_standings_id = 1
         cmex_api_parents_id = 1
@@ -325,22 +274,10 @@ for filename in files:
                     created, modified, status]
 
         for this_tuple in add_save:
-            #    print(this_tuple)
             save_complement = save_complement + (this_tuple,)
 
         for this_fields in add_fields:
-            #    print(this_tuple)
             fields = fields + (this_fields,)
-
-
-#        print("[blue] NewTuple [blue]")
-#        print(save_complement)
-#        print(fields)
-#        print(type(save_complement))
-#        print("Fields are : " + str(type(fields)))
-#
-#        print("Count of the element : " + str(len(save_complement)))
-        # insert into db
 
         insert = "insert into sistemas.dbo.cmex_api_cfdi_comprobante(cmex_api_controls_files_id, version, serie, folio, fecha,no_certificado, subtotal, descuento, total, moneda,tipo_cambio, tipo_comprobante, metodo_pago, forma_pago ,condiciones_pago,exportacion, lugar_expedicion, sello, certificado ,cmex_api_standings_id,cmex_api_parents_id, created, modified, _status) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
         # NOTE Working from hir
@@ -350,13 +287,59 @@ for filename in files:
         count = cursor.execute(insert, save_complement)
         cursor.commit()
 
-
         # get last id from comprobante
         cursor.execute(
             "select IDENT_CURRENT('sistemas.dbo.cmex_api_cfdi_comprobante') as id")
         comprobante_last_id = cursor.fetchone()[0]
         cursor.commit()
-        print("[red]"+str(comprobante_last_id)+"[red]")
+        #print("[red]"+str(comprobante_last_id)+"[red]")
+
+
+        # === === === === === === === ===  Tfd11 === === === === === === === ===
+        print("[blue] Start TFD11 DATA  XTRACTION [blue]")
+        print(cfdi_data['tfd11'])
+
+        tfd_elements = [
+         'version'
+       , 'no_certificado_sat'
+       , 'uuid'
+       , 'fecha_timbrado'
+       , 'rfc_prov_cert'
+       , 'sello_cfd'
+       , 'sello_sat'
+        ]
+        save_tfd = (cmex_api_controls_files_id,)
+        for indx,tfdata in cfdi_data['tfd11'][0].items():
+            if indx in tfd_elements :
+                save_tfd = save_tfd + (tfdata,)
+
+        for this_tuple in add_save:
+            save_tfd = save_tfd + (this_tuple,)
+
+        tfd_insert = 'insert into sistemas.dbo.cmex_api_cfdi_tfds ( \
+             cmex_api_controls_files_id \
+            ,version \
+            ,no_certificado_sat \
+            ,uuid \
+            ,fecha_timbrado \
+            ,rfc_prov_cert \
+            ,sello_cfd \
+            ,sello_sat \
+            ,cmex_api_standings_id \
+            ,cmex_api_parents_id \
+            ,created \
+            ,modified \
+            ,_status \
+            ) values(?,?,?,?,?,?,?,?,?,?,?,?,?)'
+
+        for i in track(range(2), description="Saving to TimbreFiscal data to database..."):
+            time.sleep(1)  # Simulate work being done
+
+        cursor.execute(tfd_insert,save_tfd)
+        cursor.commit()
+
+        # === === === === === === === ===  Tfd11 === === === === === === === ===
+
 
         element_qry = "insert into sistemas.dbo.cmex_api_cfdi_data( \
                         cmex_api_controls_files_id \
@@ -367,7 +350,6 @@ for filename in files:
                         ,modified \
                         ,_status \
                     ) values(?,?,?,?,?,?,?)"
-
 
         # === === === === === === === ===  Emisor === === === === === === === ===
         for i in track(range(2), description="Saving to Emisor data to database..."):
@@ -833,12 +815,10 @@ for filename in files:
 
 
         # === === === === === === === ===  TFD11  === === === === === === === ===
-                print("[blue] Start TFD11 DATA  XTRACTION [blue]")
-                print(cfdi_data['tfd11'])
 
 
     else:
-        print("[blue] The file : "+str(filename)+" already exists  [blue]")
+        print(" [gray] The file [gray] : [blue] "+str(filename)+"[blue] [red] is not process because already exists in the db owner [red]")
 cursor.close()
 
 
